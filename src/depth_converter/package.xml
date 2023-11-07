@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>PointCloudToDepthImage</name>
+  <name>depth_converter</name>
   <version>0.0.0</version>
-  <description>The PointCloudToDepthImage package</description>
+  <description>The depth_converter package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
