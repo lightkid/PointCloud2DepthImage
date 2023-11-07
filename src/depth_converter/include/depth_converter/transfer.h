@@ -64,6 +64,7 @@ public:
       x = (width > x) ? (x < 0 ? 0 : x) : width - 1;
       y = (height > y) ? (y < 0 ? 0 : y) : height - 1;
       res.at<float>(y, x) = vnorm; // TODO： 不要用at
+      // TODO:可能多个光线投影在同一个像素上，如果该像素非0，则应该取二者最小值
     }
     return res;
   }
