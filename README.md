@@ -7,3 +7,5 @@
 run：
 
     rosrun depth_converter transfer
+
+显示时候灰度比较浅
