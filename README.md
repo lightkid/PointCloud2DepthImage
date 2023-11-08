@@ -9,3 +9,5 @@ run：
 
     rosrun depth_converter transfer
 
+v1.0为cpu版本
+v2.0为gpu版本
