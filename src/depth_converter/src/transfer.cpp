@@ -13,7 +13,7 @@ void pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg) {
   // transform point cloud to depth image
   cv::Size size(360, 59);
   auto t1 = std::chrono::steady_clock::now();
-  cv::Mat depth = transfer.getDepthIamge(cloud, size);
+  cv::Mat depth = transfer.getDepthImageCUDA(cloud, size);
   auto t2 = std::chrono::steady_clock::now();
   float dt = std::chrono::duration<float, std::milli>(t2 - t1).count();
   std::cout << "generate depth cost: " << dt << " ms" << std::endl;

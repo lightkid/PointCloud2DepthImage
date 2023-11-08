@@ -7,6 +7,8 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
+#include "depth_render.cuh"
+
 class PC2DITransfer {
 public:
   PC2DITransfer(float hfov, float vfov, float cxTheta, float cyPhi)
@@ -22,7 +24,40 @@ public:
    * @param pointCloud 局部坐标系下雷达点
    * @param size   图像尺寸
    */
-  cv::Mat getDepthIamge(const pcl::PointCloud<pcl::PointXYZ> &pointCloud,
+  cv::Mat getDepthImageCUDA(const pcl::PointCloud<pcl::PointXYZ> &pointCloud,
+                            const cv::Size &size) {
+    int *depth_hostptr;
+    DepthRender depthrender;
+    // Eigen::Matrix4d cam_pose = Eigen::Matrix4d::Identity();
+
+    int width = size.width;
+    int height = size.height;
+    depthrender.set_para(hfov_, vfov_, cxTheta_, cyPhi_, width, height);
+
+    vector<float> cloud_data;
+    cloud_data.reserve(3 * pointCloud.points.size());
+    for (auto &p : pointCloud.points) {
+      cloud_data.emplace_back(p.x);
+      cloud_data.emplace_back(p.y);
+      cloud_data.emplace_back(p.z);
+    }
+    depthrender.set_data(cloud_data);
+
+    depth_hostptr = (int *)malloc(width * height * sizeof(int));
+    depthrender.render_pose(depth_hostptr);
+    cv::Mat depth_mat = cv::Mat::zeros(height, width, CV_32FC1);
+    // double min = 0.5;
+    double max = 1.0f;
+    for (int i = 0; i < height; i++)
+      for (int j = 0; j < width; j++) {
+        float depth = (float)depth_hostptr[i * width + j] / 1000.0f;
+        depth = depth < 500.0f ? depth : 0;
+        // max = depth > max ? depth : max;
+        depth_mat.at<float>(i, j) = depth;
+      }
+    return depth_mat;
+  }
+  cv::Mat getDepthImage(const pcl::PointCloud<pcl::PointXYZ> &pointCloud,
                         const cv::Size &size) {
     /* 右手系
               ^x
