@@ -12,8 +12,8 @@ CUDA: 12.0
 
 $$
 \begin{array}{l}
-\theta=\text{sign} (y) \cdot \text{arccos} (\frac{x\sqrt{x^2+y^2+z^2}}{\sqrt{x^2+y^2}})\\
-\phi=\text{arcsin}(\frac{z}{\sqrt{x^2+y^2+z^2}})\\
+\theta=\text{sign} (y) \cdot \text{arccos} (\cfrac{x\sqrt{x^2+y^2+z^2}}{\sqrt{x^2+y^2}})\\
+\phi=\text{arcsin}(\cfrac{z}{\sqrt{x^2+y^2+z^2}})\\
 d=\sqrt{x^2+y^2+z^2}
 \end{array}
 $$
