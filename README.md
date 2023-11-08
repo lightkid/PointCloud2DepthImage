@@ -15,3 +15,5 @@ run：
 v1.0为cpu版本
 
 v2.0为gpu版本
+
+参考了FUEL中的仿真部分：https://github.com/HKUST-Aerial-Robotics/FUEL.git
