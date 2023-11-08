@@ -2,6 +2,7 @@
 #define TRANSFER_H_
 
 #include <Eigen/Dense>
+#include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
 
 #include <pcl/point_cloud.h>
@@ -46,14 +47,17 @@ public:
     depth_hostptr = (int *)malloc(width * height * sizeof(int));
     depthrender.render_pose(depth_hostptr);
     cv::Mat depth_mat = cv::Mat::zeros(height, width, CV_32FC1);
+    // cv::Mat depth_mat = cv::Mat::zeros(height, width, CV_8UC1);
     // double min = 0.5;
-    double max = 1.0f;
+    // double max = 1.0f;
     for (int i = 0; i < height; i++)
       for (int j = 0; j < width; j++) {
         float depth = (float)depth_hostptr[i * width + j] / 1000.0f;
         depth = depth < 500.0f ? depth : 0;
         // max = depth > max ? depth : max;
+        // depth = depth * 255 / 3;
         depth_mat.at<float>(i, j) = depth;
+        // depth_mat.at<uint8_t>(i, j) = (uint8_t)(depth);
       }
     return depth_mat;
   }

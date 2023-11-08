@@ -31,6 +31,7 @@ if(ENABLE_CUDA)
   find_package(catkin REQUIRED COMPONENTS
     roscpp
     pcl_ros
+    cv_bridge
   )
 
   catkin_package(
@@ -64,6 +65,7 @@ else(ENABLE_CUDA)
   find_package(catkin REQUIRED COMPONENTS
     roscpp
     pcl_ros
+    cv_bridge
   )
 
   catkin_package(
