@@ -1,7 +1,9 @@
 # PointCloud2DepthImage
 
 平台：ROS noetic
+
 GPU：RTX 3060 (8.6)
+
 CUDA: 12.0
 
 输入：点云sensor_msg::PointCloud2，话题名为/scan
