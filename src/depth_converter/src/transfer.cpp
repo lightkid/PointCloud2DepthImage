@@ -32,7 +32,7 @@ void pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg) {
 int main(int argc, char **argv) {
   ros::init(argc, argv, "test");
   ros::NodeHandle nh;
-  pub_depth = nh.advertise<sensor_msgs::Image>("depth", 1000);
+  pub_depth = nh.advertise<sensor_msgs::Image>("/depth", 1000);
   ros::Subscriber pcSub =
       nh.subscribe<sensor_msgs::PointCloud2>("/scan", 10, pointCloudCallback);
   ros::spin();
