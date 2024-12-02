@@ -1,6 +1,7 @@
 #include <depth_cut/depth_cut_node.h>
 
-
+Eigen::Vector3d camera_pos_;
+Eigen::Quaterniond camera_q_;
 cv_bridge::CvImagePtr cv_ptr;
 cv::Mat depth_image;
 std::vector<Eigen::Vector3d> proj_points;
@@ -17,6 +18,7 @@ ros::Publisher var_img_pub;
 ros::Publisher obj_img_pub;
 ros::Publisher marker_pub;
 ros::Publisher normals_pub;
+ros::Publisher cloud_pub;
 
 void ProjDepthImage(){
     // 像素每个点计算一个世界位置
@@ -26,6 +28,11 @@ void ProjDepthImage(){
     proj_points.resize(rows * cols, Eigen::Vector3d::Zero());
     idx_valid.clear();
     idx_valid.resize(rows*cols, 0);
+
+    camera_pos_ = Eigen::Vector3d::Zero();
+    camera_q_ = Eigen::Quaterniond(0.5, -0.5, 0.5, -0.5);
+
+    Eigen::Matrix3d camera_r = camera_q_.toRotationMatrix();
 
     uint16_t* row_ptr;
     double depth;
@@ -40,13 +47,35 @@ void ProjDepthImage(){
             proj_pt(1) = (v - cy) * depth / fy;
             proj_pt(2) = depth;
 
-            // proj_pt = proj_pt + md_.camera_pos_;
+            proj_pt = camera_r * proj_pt + camera_pos_;
 
             // if (u == 320 && v == 240) std::cout << "depth: " << depth << std::endl;
             proj_points[proj_points_cnt] = proj_pt;
             idx_valid[proj_points_cnt++] = 1;
         }
     }
+}
+
+void PublishClouds(){
+    pcl::PointXYZ pt;
+    pcl::PointCloud<pcl::PointXYZ> cloud;
+
+    for(auto & p : proj_points){
+        pt.x = p(0);
+        pt.y = p(1);
+        pt.z = p(2);
+        cloud.push_back(pt);
+    }
+    // ROS_WARN("pt:%ld",cloud.size());
+
+    cloud.width = cloud.points.size();
+    cloud.height = 1;
+    cloud.is_dense = true;
+    cloud.header.frame_id = "map";
+    sensor_msgs::PointCloud2 cloud_msg;
+
+    pcl::toROSMsg(cloud, cloud_msg);
+    cloud_pub.publish(cloud_msg);
 }
 
 void CalNormalVectors(){
@@ -58,19 +87,25 @@ void CalNormalVectors(){
     };
     local_normals.clear();
     local_normals.resize(rows*cols,Eigen::Vector3d::Zero());
-    Eigen::Vector3d left,right,up,down,dir_u,dir_v,normal;
+    Eigen::Vector3d mid,left,right,up,down,dir_u,dir_v,normal;
     for (int v = kernel_half_size; v < rows - kernel_half_size; v++) {
         for (int u = kernel_half_size; u < cols-kernel_half_size; u++) {
             if(idx_valid[vu2idx(v,u)] != 1){
                 continue;
             }
+            mid = proj_points[vu2idx(v, u)];
             // u方向 l->r
             left = proj_points[vu2idx(v, u - kernel_half_size)];
+            if((left - mid).norm() > 0.1) continue;
             right = proj_points[vu2idx(v, u + kernel_half_size)];
+            if((right - mid).norm() > 0.1) continue;
+            // 判断是否在邻域
             dir_u = right - left;
             // v方向 d->u
             up = proj_points[vu2idx(v - kernel_half_size, u)];
+            if((up - mid).norm() > 0.1) continue;
             down = proj_points[vu2idx(v + kernel_half_size, u)];
+            if((down - mid).norm() > 0.1) continue;
             dir_v = up - down;
             // normal = du x dv
             normal = dir_u.cross(dir_v);
@@ -88,28 +123,28 @@ void PublishWorldPointsNormals(){
     visualization_msgs::Marker marker;
 
     // 设置 marker 的 frame_id 和时间戳
-    marker.header.frame_id = "/map";
+    marker.header.frame_id = "map";
     marker.header.stamp = ros::Time::now();
 
     // 设置 marker 的命名空间和 ID
     marker.ns = "arrow_markers";
-    marker.action = visualization_msgs::Marker::ADD;
+    marker.action = visualization_msgs::Marker::MODIFY;
 
     // 设置 marker 的类型为 ARROW，并设置其大小
     marker.type = visualization_msgs::Marker::ARROW;
-    marker.scale.x = 0.1;
-    marker.scale.y = 0.2;
-    marker.scale.z = 0.2;
+    marker.scale.x = 0.01;
+    marker.scale.y = 0.02;
+    marker.scale.z = 0.02;
 
     // 设置 marker 的生命周期
     marker.lifetime = ros::Duration();
 
     int points_num = proj_points.size();
 
-    for (int i = 0; i <points_num; ++i) {
+    for (int i = 0; i <points_num; i+=100) {
         auto &pos = proj_points[i];
         auto nrl = local_normals[i];
-        Eigen::Vector3d e3 = Eigen::Vector3d(0,0,1);
+        // Eigen::Vector3d e3 = Eigen::Vector3d(0,0,1);
         nrl.normalize();
         // auto dir = e3.cross(nrl);
         // dir.normalize();
@@ -124,9 +159,9 @@ void PublishWorldPointsNormals(){
         start.x = pos(0);
         start.y = pos(1);
         start.z = pos(2);
-        end.x = pos(0) + nrl(0) * 0.2;
-        end.y = pos(1) + nrl(1) * 0.2;
-        end.z = pos(2) + nrl(2) * 0.2;
+        end.x = pos(0) + nrl(0) * 0.1;
+        end.y = pos(1) + nrl(1) * 0.1;
+        end.z = pos(2) + nrl(2) * 0.1;
 
         // 设置 marker 的 pose，箭头方向由起点和终点决定
         marker.points.clear();
@@ -148,17 +183,22 @@ void PublishNormals(){
     pcl::PointXYZ pt;
     pcl::PointCloud<pcl::PointXYZ> cloud;
 
-    for(auto & nrl : local_normals){
+    for(auto nrl : local_normals){
+        nrl.normalize();
+        if(nrl.norm()<0.1){
+            continue;
+        }
         pt.x = nrl(0);
         pt.y = nrl(1);
         pt.z = nrl(2);
         cloud.push_back(pt);
     }
+    ROS_WARN("pt:%ld",cloud.size());
 
     cloud.width = cloud.points.size();
     cloud.height = 1;
     cloud.is_dense = true;
-    cloud.header.frame_id = "normals";
+    cloud.header.frame_id = "map";
     sensor_msgs::PointCloud2 cloud_msg;
 
     pcl::toROSMsg(cloud, cloud_msg);
@@ -202,11 +242,12 @@ void CalDepthVariance(){
     out_msg.header.stamp = ros::Time::now();
     out_msg.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     out_msg.image = var_image.clone();
-    var_img_pub.publish(out_msg.toImageMsg());
+    // var_img_pub.publish(out_msg.toImageMsg());
 }
 
 void DepthCallback(const sensor_msgs::ImageConstPtr &img){
     // get depth image
+    ROS_INFO("get");
     cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
 
     if (img->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
@@ -214,7 +255,9 @@ void DepthCallback(const sensor_msgs::ImageConstPtr &img){
     }
     cv_ptr->image.copyTo(depth_image);
     ProjDepthImage();
+    PublishClouds();
     CalNormalVectors();
+    ROS_INFO("get1,%d",idx_valid.size());
     PublishWorldPointsNormals();
     PublishNormals();
 }
@@ -222,11 +265,12 @@ void DepthCallback(const sensor_msgs::ImageConstPtr &img){
 int main(int argc, char** argv){
     ros::init(argc, argv, "depth_cut_node");
     ros::NodeHandle nh;
-    var_img_pub = nh.advertise<sensor_msgs::Image>("/var_img", 2); //发布每个点的方差
-    obj_img_pub = nh.advertise<sensor_msgs::Image>("/obj_img", 2); //发布最后不同类别的
+    // var_img_pub = nh.advertise<sensor_msgs::Image>("/var_img", 2); //发布每个点的方差
+    // obj_img_pub = nh.advertise<sensor_msgs::Image>("/obj_img", 2); //发布最后不同类别的
     marker_pub = nh.advertise<visualization_msgs::MarkerArray>("/objects", 1);
     normals_pub = nh.advertise<sensor_msgs::PointCloud2>("/normals", 2);
-    ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/pcl_render_node/depth", 2, DepthCallback);
+    cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("/cloud", 2);
+    ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/d435/depth/image_raw", 2, DepthCallback);
     // ros::Rate loop_rate(40);
     // while(ros::ok()){
         // ros::spinOnce();
