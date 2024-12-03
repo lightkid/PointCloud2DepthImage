@@ -13,7 +13,7 @@ double cx = 321.04638671875;
 double cy = 243.44969177246094;
 double fx = 387.229248046875;
 double fy = 387.229248046875;
-int kernel_half_size{1}; // 5/2
+int kernel_half_size{2}; // 5/2
 ros::Publisher var_img_pub;
 ros::Publisher obj_img_pub;
 ros::Publisher marker_pub;
@@ -30,7 +30,7 @@ void ProjDepthImage(){
     idx_valid.resize(rows*cols, 0);
 
     camera_pos_ = Eigen::Vector3d::Zero();
-    camera_q_ = Eigen::Quaterniond(0.5, -0.5, 0.5, -0.5);
+    camera_q_ = Eigen::Quaterniond(-0.5, 0.5, -0.5, 0.5);
 
     Eigen::Matrix3d camera_r = camera_q_.toRotationMatrix();
 
@@ -146,6 +146,13 @@ void PublishWorldPointsNormals(){
         auto nrl = local_normals[i];
         // Eigen::Vector3d e3 = Eigen::Vector3d(0,0,1);
         nrl.normalize();
+        if(nrl.norm() < 0.1){
+            continue;
+        }
+        // (nrl.x()<0.1&&nrl.y()<0.1)
+        // if(nrl.z()>-0.1 || nrl.z() < -0.8) {
+        //     continue;
+        // }
         // auto dir = e3.cross(nrl);
         // dir.normalize();
         // double cosa = nrl(2);
@@ -182,12 +189,16 @@ void PublishNormals(){
     // 将法向量和投影长度单独显示，用于可视化不同平面簇
     pcl::PointXYZ pt;
     pcl::PointCloud<pcl::PointXYZ> cloud;
-
-    for(auto nrl : local_normals){
-        nrl.normalize();
-        if(nrl.norm()<0.1){
+    int points_num = local_normals.size();
+    for(int i = 0; i < points_num; i+=100){
+        auto nrl = local_normals[i];
+        // nrl.normalize();
+        if(nrl.norm() < 0.1){
             continue;
         }
+        // if(nrl.z()>-0.1 || nrl.z() < -0.8) {
+        //     continue;
+        // }
         pt.x = nrl(0);
         pt.y = nrl(1);
         pt.z = nrl(2);
@@ -247,7 +258,7 @@ void CalDepthVariance(){
 
 void DepthCallback(const sensor_msgs::ImageConstPtr &img){
     // get depth image
-    ROS_INFO("get");
+    auto start_time = ros::Time::now();
     cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
 
     if (img->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
@@ -257,9 +268,12 @@ void DepthCallback(const sensor_msgs::ImageConstPtr &img){
     ProjDepthImage();
     PublishClouds();
     CalNormalVectors();
-    ROS_INFO("get1,%d",idx_valid.size());
+    ROS_INFO("get1,%ld",idx_valid.size());
     PublishWorldPointsNormals();
     PublishNormals();
+    // TODO:把深度图的原图和计算结果完整的保存下来，存成txt文件，用来检查特殊方向的产生原因
+    auto end_time = ros::Time::now();
+    ROS_WARN("used time:%f",(end_time - start_time).toSec()*1000);
 }
 
 int main(int argc, char** argv){
@@ -271,6 +285,10 @@ int main(int argc, char** argv){
     normals_pub = nh.advertise<sensor_msgs::PointCloud2>("/normals", 2);
     cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("/cloud", 2);
     ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/d435/depth/image_raw", 2, DepthCallback);
+    Eigen::Quaterniond camera_q1_ = Eigen::Quaterniond(0.707, 0.0, 0.707, 0.0);
+    Eigen::Quaterniond camera_q2_ = Eigen::Quaterniond(0.707, 0.0, 0.0, -0.707);
+    auto q = camera_q1_ * camera_q2_;
+    ROS_INFO("%f,%f,%f,%f",q.x(),q.y(),q.z(),q.w());
     // ros::Rate loop_rate(40);
     // while(ros::ok()){
         // ros::spinOnce();
