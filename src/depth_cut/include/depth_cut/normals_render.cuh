@@ -48,6 +48,22 @@ class NormalsRender {
     }
     return true;
   }
+  bool get_valid(std::vector<int>& valids){
+    valids.clear();
+    valids.resize(parameter_ptr_->point_number);
+    for(int i = 0; i < parameter_ptr_->point_number;++i){
+      valids[i] = idx_valid_ptr_[i];
+    }
+    return true;
+  }
+  bool get_depth(std::vector<uint16_t>& depthimg){
+    depthimg.clear();
+    depthimg.resize(parameter_ptr_->point_number);
+    for(int i = 0; i < parameter_ptr_->point_number;++i){
+      depthimg[i] = depth_ptr_[i];
+    }
+    return true;
+  }
   Parameter* get_param(){
     return parameter_ptr_;
   }

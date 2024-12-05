@@ -1,12 +1,29 @@
 #include "depth_cut/normals_render.cuh"
 
+__global__ void result_init(Parameter *para_ptr, int *idx_valid_ptr, float3 *cloud_ptr, float3 *normals_ptr) {
+  int u = blockIdx.x * blockDim.x + threadIdx.x;
+  int v = blockIdx.y * blockDim.y + threadIdx.y;
+  int index = v * para_ptr->width + u;
+  if (index >= para_ptr->point_number){
+    // idx_valid_ptr[index] = 0;
+    return;
+  }else{
+    idx_valid_ptr[index] = 0;
+  }
+  return;
+}
+
 __global__ void render_cloud(uint16_t *depth_ptr, Parameter *para_ptr, int *idx_valid_ptr, float3 *cloud_ptr) {
   int u = blockIdx.x * blockDim.x + threadIdx.x;
   int v = blockIdx.y * blockDim.y + threadIdx.y;
-  
+  // if(u > para_ptr->width || v > para_ptr->height) return;
   int index = v * para_ptr->width + u;
-  if (index >= para_ptr->point_number) return;
-  float depth = depth_ptr[index] / para_ptr->k_depth_scaling_factor;
+  if (index >= para_ptr->point_number){
+    // idx_valid_ptr[index] = 0;
+    return;
+  }
+  uint16_t depth_u = depth_ptr[index];
+  float depth = float(depth_u) / para_ptr->k_depth_scaling_factor;
 
   const int width = para_ptr->width;
   const int height = para_ptr->height;
@@ -26,7 +43,13 @@ __global__ void render_cloud(uint16_t *depth_ptr, Parameter *para_ptr, int *idx_
   transformed_point.z = para_ptr->r[6] * point.x + para_ptr->r[7] * point.y + para_ptr->r[8] * point.z + para_ptr->t[2];
 
   cloud_ptr[index] = transformed_point;
-  idx_valid_ptr[index] = depth > 0.1 ? 1 : 0;
+  if(depth>0.1){
+    idx_valid_ptr[index] = 1;
+    
+  }else{
+    idx_valid_ptr[index] = 0;
+  }
+  // cloud_ptr[index].x = depth;
 }
 
 __global__ void render_normals(Parameter *para_ptr, int *idx_valid_ptr, float3 *cloud_ptr, float3 *normals_ptr) {
@@ -134,17 +157,20 @@ void NormalsRender::set_data(cv::Mat& depth_img) {
       return;
   }
   // depth_ptr_ = depth_img.ptr<uint16_t>(0);
-  cudaMemcpy(depth_ptr_, depth_img.data, img_size, cudaMemcpyHostToDevice);
-  cudaDeviceSynchronize();
-  // float* row_ptr;
-  // float depth;
+  // cudaMemcpy(depth_ptr_, depth_img.data, img_size, cudaMemcpyHostToDevice);
+  // cudaDeviceSynchronize();
+  uint16_t* row_ptr = depth_img.ptr<uint16_t>(0);
+  for(int i=0;i<img_size;++i){
+    depth_ptr_[i] = *(row_ptr + i);
+  }
+  // uint16_t depth;
   // uint32_t proj_points_cnt = 0;
   // for (int v = 0; v < rows; v++) {
-  //     row_ptr = depth_img.ptr<float>(v);
+  //     row_ptr = depth_img.ptr<uint16_t>(v);
   //     for (int u = 0; u < cols; u++) {
   //         depth = (*row_ptr++);
           
-  //         depth_ptr_[proj_points_cnt] = depth;
+  //         depth_ptr_[proj_points_cnt++] = depth;
   //         // if(v=160&&u==320)
   //         //   std::cout<<depth<<" "<<depth_ptr_[proj_points_cnt]<<std::endl;
           
@@ -160,6 +186,7 @@ void NormalsRender::render_pose(float *r, float *t) {
   depth_block.y = 32;
   depth_grid.x = (parameter_ptr_->width + depth_block.x - 1) / depth_block.x;
   depth_grid.y = (parameter_ptr_->height + depth_block.y - 1) / depth_block.y;
+  // result_init<<<depth_grid, depth_block>>>(parameter_ptr_, idx_valid_ptr_, cloud_ptr_, normals_ptr_);
   render_cloud<<<depth_grid, depth_block>>>(depth_ptr_, parameter_ptr_, idx_valid_ptr_, cloud_ptr_);
   render_normals<<<depth_grid, depth_block>>>(parameter_ptr_, idx_valid_ptr_, cloud_ptr_, normals_ptr_);
   cudaDeviceSynchronize();

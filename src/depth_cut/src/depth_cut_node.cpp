@@ -298,6 +298,9 @@ void DepthCallbackCUDA(const sensor_msgs::ImageConstPtr &img){
     NormalsRender nr(fx,fy,cx,cy,cols,rows,kernel_half_size, k_depth_scaling_factor);
     
     nr.set_data(depth_image);
+    // std::vector<uint16_t> de;
+    // nr.get_depth(de);
+
     camera_pos_ = Eigen::Vector3d::Zero();
     camera_q_ = Eigen::Quaterniond(-0.5, 0.5, -0.5, 0.5);
 
@@ -311,12 +314,33 @@ void DepthCallbackCUDA(const sensor_msgs::ImageConstPtr &img){
     }
     
     nr.render_pose(rr,tt);
-    
-    ROS_WARN("get_cloud");
+
+    // auto para = nr.get_param();
+    // nr.get_valid(idx_valid);
+    // nr.get_cloud(proj_points);
+    // int cnt=0,cnt1=0,cnt2=0,cnt3=0;
+    // std::cout<<"num"<<para->point_number<<std::endl;
+    // for(int i=0;i<para->point_number;++i){
+    //     if(idx_valid[i]!=1){
+    //         // std::cout<<i<<std::endl;
+    //         cnt++;
+    //     }
+    //     if(!(proj_points[i](0) > 0.1)){
+    //         cnt1++;
+    //     }
+    //     if(!(de[i]>100)){
+    //         cnt2++;
+    //     }
+    //     if(!(*(depth_image.ptr<uint16_t>(0) + i) > 100)){
+    //         cnt3++;
+    //     }
+    // }
+    // std::cout<<cnt<<" "<<cnt1<<" "<<cnt2<<" "<<cnt3<<std::endl;
+    // ROS_WARN("get_cloud");
     if(nr.get_cloud(proj_points) && nr.get_normals(local_normals)){
         // PublishClouds();
-        // PublishWorldPointsNormals();
-        // PublishNormals();
+        PublishWorldPointsNormals();
+        PublishNormals();
     }
     auto end_time = ros::Time::now();
     ROS_WARN("used time:%f",(end_time - start_time).toSec()*1000);
@@ -331,10 +355,10 @@ int main(int argc, char** argv){
     normals_pub = nh.advertise<sensor_msgs::PointCloud2>("/normals", 2);
     cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("/cloud", 2);
     ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/d435/depth/image_raw", 2, DepthCallbackCUDA);
-    Eigen::Quaterniond camera_q1_ = Eigen::Quaterniond(0.707, 0.0, 0.707, 0.0);
-    Eigen::Quaterniond camera_q2_ = Eigen::Quaterniond(0.707, 0.0, 0.0, -0.707);
-    auto q = camera_q1_ * camera_q2_;
-    ROS_INFO("%f,%f,%f,%f",q.x(),q.y(),q.z(),q.w());
+    // Eigen::Quaterniond camera_q1_ = Eigen::Quaterniond(0.707, 0.0, 0.707, 0.0);
+    // Eigen::Quaterniond camera_q2_ = Eigen::Quaterniond(0.707, 0.0, 0.0, -0.707);
+    // auto q = camera_q1_ * camera_q2_;
+    // ROS_INFO("%f,%f,%f,%f",q.x(),q.y(),q.z(),q.w());
     // ros::Rate loop_rate(40);
     // while(ros::ok()){
         // ros::spinOnce();
