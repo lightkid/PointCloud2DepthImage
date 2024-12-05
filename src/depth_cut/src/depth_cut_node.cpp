@@ -19,6 +19,7 @@ ros::Publisher obj_img_pub;
 ros::Publisher marker_pub;
 ros::Publisher normals_pub;
 ros::Publisher cloud_pub;
+// NormalsRender nr;
 
 void ProjDepthImage(){
     // 像素每个点计算一个世界位置
@@ -42,7 +43,10 @@ void ProjDepthImage(){
         for (int u = 0; u < cols; u++) {
             Eigen::Vector3d proj_pt;
             depth = (*row_ptr++) / k_depth_scaling_factor;
-            if(depth < 0.5) continue;
+            if(depth < 0.5) {
+                proj_points_cnt++;
+                continue;
+            }
             proj_pt(0) = (u - cx) * depth / fx;
             proj_pt(1) = (v - cy) * depth / fy;
             proj_pt(2) = depth;
@@ -265,13 +269,55 @@ void DepthCallback(const sensor_msgs::ImageConstPtr &img){
         (cv_ptr->image).convertTo(cv_ptr->image, CV_16UC1, k_depth_scaling_factor);
     }
     cv_ptr->image.copyTo(depth_image);
+    
     ProjDepthImage();
-    PublishClouds();
+    // PublishClouds();
     CalNormalVectors();
-    ROS_INFO("get1,%ld",idx_valid.size());
-    PublishWorldPointsNormals();
-    PublishNormals();
+    
+    // ROS_INFO("get1,%ld",idx_valid.size());
+    // PublishWorldPointsNormals();
+    // PublishNormals();
     // TODO:把深度图的原图和计算结果完整的保存下来，存成txt文件，用来检查特殊方向的产生原因
+    auto end_time = ros::Time::now();
+    ROS_WARN("used time:%f",(end_time - start_time).toSec()*1000);
+}
+
+void DepthCallbackCUDA(const sensor_msgs::ImageConstPtr &img){
+    // get depth image
+    auto start_time = ros::Time::now();
+    cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
+
+    if (img->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+        (cv_ptr->image).convertTo(cv_ptr->image, CV_16UC1, k_depth_scaling_factor);
+    }
+    cv_ptr->image.copyTo(depth_image);
+
+    int cols = depth_image.cols;
+    int rows = depth_image.rows;
+
+    NormalsRender nr(fx,fy,cx,cy,cols,rows,kernel_half_size, k_depth_scaling_factor);
+    
+    nr.set_data(depth_image);
+    camera_pos_ = Eigen::Vector3d::Zero();
+    camera_q_ = Eigen::Quaterniond(-0.5, 0.5, -0.5, 0.5);
+
+    Eigen::Matrix3d camera_r = camera_q_.toRotationMatrix();
+    float tt[3] = {camera_pos_(0),camera_pos_(1),camera_pos_(2)};
+    float rr[9];
+    for(int i=0;i<3;++i){
+        for(int j=0;j<3;++j){
+            rr[j+3*i] = camera_r(i,j);
+        }
+    }
+    
+    nr.render_pose(rr,tt);
+    
+    ROS_WARN("get_cloud");
+    if(nr.get_cloud(proj_points) && nr.get_normals(local_normals)){
+        // PublishClouds();
+        // PublishWorldPointsNormals();
+        // PublishNormals();
+    }
     auto end_time = ros::Time::now();
     ROS_WARN("used time:%f",(end_time - start_time).toSec()*1000);
 }
@@ -284,7 +330,7 @@ int main(int argc, char** argv){
     marker_pub = nh.advertise<visualization_msgs::MarkerArray>("/objects", 1);
     normals_pub = nh.advertise<sensor_msgs::PointCloud2>("/normals", 2);
     cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("/cloud", 2);
-    ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/d435/depth/image_raw", 2, DepthCallback);
+    ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/d435/depth/image_raw", 2, DepthCallbackCUDA);
     Eigen::Quaterniond camera_q1_ = Eigen::Quaterniond(0.707, 0.0, 0.707, 0.0);
     Eigen::Quaterniond camera_q2_ = Eigen::Quaterniond(0.707, 0.0, 0.0, -0.707);
     auto q = camera_q1_ * camera_q2_;
