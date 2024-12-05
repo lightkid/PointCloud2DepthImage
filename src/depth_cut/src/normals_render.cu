@@ -157,12 +157,17 @@ void NormalsRender::set_data(cv::Mat& depth_img) {
       return;
   }
   // depth_ptr_ = depth_img.ptr<uint16_t>(0);
-  // cudaMemcpy(depth_ptr_, depth_img.data, img_size, cudaMemcpyHostToDevice);
+
+
+  cudaMemcpy(depth_ptr_, depth_img.data, img_size*sizeof(uint16_t), cudaMemcpyHostToDevice);
   // cudaDeviceSynchronize();
-  uint16_t* row_ptr = depth_img.ptr<uint16_t>(0);
-  for(int i=0;i<img_size;++i){
-    depth_ptr_[i] = *(row_ptr + i);
-  }
+
+  // uint16_t* row_ptr = depth_img.ptr<uint16_t>(0);
+  // for(int i = 0; i < img_size; ++i){
+  //   depth_ptr_[i] = *(row_ptr + i);
+  // }
+
+
   // uint16_t depth;
   // uint32_t proj_points_cnt = 0;
   // for (int v = 0; v < rows; v++) {
