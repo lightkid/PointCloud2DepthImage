@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /Image1
       Splitter Ratio: 0.5
     Tree Height: 355
   - Class: rviz/Selection
@@ -25,7 +26,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2
+    SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -84,12 +85,12 @@ Visualization Manager:
       Marker Topic: /objects
       Name: MarkerArray
       Namespaces:
-        arrow_markers: true
+        {}
       Queue Size: 100
       Value: true
     - Class: rviz/Image
       Enabled: true
-      Image Topic: /d435/depth/image_raw
+      Image Topic: /camera/depth/image_rect_raw
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -98,6 +99,34 @@ Visualization Manager:
       Queue Size: 2
       Transport Hint: raw
       Unreliable: false
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: PointCloud2
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.009999999776482582
+      Style: Flat Squares
+      Topic: /cloud
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
       Value: true
   Enabled: true
   Global Options:
@@ -145,7 +174,7 @@ Visualization Manager:
       Near Clip Distance: 0.009999999776482582
       Pitch: 0.29979604482650757
       Target Frame: <Fixed Frame>
-      Yaw: 3.1931638717651367
+      Yaw: 3.1881637573242188
     Saved: ~
 Window Geometry:
   Displays:
@@ -165,5 +194,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1200
-  X: 72
-  Y: 27
+  X: 1011
+  Y: 269

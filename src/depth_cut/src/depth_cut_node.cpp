@@ -9,53 +9,106 @@ std::vector<int> idx_valid;
 std::vector<Eigen::Vector3d> local_normals;
 cv::Mat var_image;
 double k_depth_scaling_factor{1000.0};
+int skip_pixel{2};
 double cx = 321.04638671875;
 double cy = 243.44969177246094;
 double fx = 387.229248046875;
 double fy = 387.229248046875;
-int kernel_half_size{2}; // 5/2
+int kernel_half_size{3}; // 5/2
 ros::Publisher var_img_pub;
 ros::Publisher obj_img_pub;
 ros::Publisher marker_pub;
 ros::Publisher normals_pub;
 ros::Publisher cloud_pub;
+sensor_msgs::Image depth_img;
 // NormalsRender nr;
 
 void ProjDepthImage(){
     // 像素每个点计算一个世界位置
-    int cols = depth_image.cols;
-    int rows = depth_image.rows;
-    proj_points.clear();
-    proj_points.resize(rows * cols, Eigen::Vector3d::Zero());
-    idx_valid.clear();
-    idx_valid.resize(rows*cols, 0);
+    // int cols = depth_image.cols;
+    // int rows = depth_image.rows;
+    // proj_points.clear();
+    // proj_points.resize(rows * cols / skip_pixel/skip_pixel, Eigen::Vector3d::Zero());
+    // idx_valid.clear();
+    // idx_valid.resize(rows*cols / skip_pixel/skip_pixel, 0);
 
     camera_pos_ = Eigen::Vector3d::Zero();
     camera_q_ = Eigen::Quaterniond(-0.5, 0.5, -0.5, 0.5);
 
     Eigen::Matrix3d camera_r = camera_q_.toRotationMatrix();
 
-    uint16_t* row_ptr;
+    // uint16_t* row_ptr;
     double depth;
     uint32_t proj_points_cnt = 0;
-    for (int v = 0; v < rows; v++) {
-        row_ptr = depth_image.ptr<uint16_t>(v);
-        for (int u = 0; u < cols; u++) {
-            Eigen::Vector3d proj_pt;
-            depth = (*row_ptr++) / k_depth_scaling_factor;
-            if(depth < 0.5) {
-                proj_points_cnt++;
-                continue;
+    Eigen::Vector3d proj_pt;
+    // for (int v = 0; v < rows; v+=skip_pixel) {
+    //     row_ptr = depth_image.ptr<uint16_t>(v);
+    //     for (int u = 0; u < cols; u+=skip_pixel) {
+    //         // Eigen::Vector3d proj_pt;
+    //         depth = (*row_ptr) / k_depth_scaling_factor;
+    //         // if(v==240&&u==320){
+    //             // std::cout<<"depth:"<<(*row_ptr)<<std::endl;
+    //         // }
+    //         if(depth < 0.2) {
+    //             idx_valid[proj_points_cnt++] = 0;
+    //             // proj_points_cnt++;
+    //             continue;
+    //         }
+    //         proj_pt(0) = (u - cx) * depth / fx;
+    //         proj_pt(1) = (v - cy) * depth / fy;
+    //         proj_pt(2) = depth;
+
+    //         proj_pt = camera_r * proj_pt + camera_pos_;
+
+    //         // if (u == 320 && v == 240) std::cout << "depth: " << depth << std::endl;
+    //         proj_points[proj_points_cnt] = proj_pt;
+    //         idx_valid[proj_points_cnt++] = 1;
+    //         row_ptr = row_ptr + skip_pixel;
+    //     }
+    // }
+    if (depth_img.encoding == sensor_msgs::image_encodings::TYPE_16UC1){
+        // 获取图像的宽度和高度
+        int width = depth_img.width;
+        int height = depth_img.height;
+        proj_points.clear();
+        proj_points.resize(height * width / skip_pixel/skip_pixel, Eigen::Vector3d::Zero());
+        idx_valid.clear();
+        idx_valid.resize(height*width / skip_pixel/skip_pixel, 0);
+
+        // 获取图像数据指针
+        const uint16_t* data = reinterpret_cast<const uint16_t*>(&depth_img.data[0]);
+
+        // 遍历图像中的每个像素
+        for (int row = 0; row < height; row += skip_pixel)
+        {
+            for (int col = 0; col < width; col += skip_pixel)
+            {
+                // 计算像素索引
+                int index = row * width + col;
+
+                // 获取像素值
+                depth = data[index] / k_depth_scaling_factor;
+                // uint16_t pixel_value = data[index];
+                // std::cout<<pixel_value<<" ";
+                // 这里你可以对像素值进行操作，例如打印
+                // ROS_INFO("Pixel value at (%d, %d): %u", col, row, pixel_value);
+                if(depth < 0.2) {
+                    idx_valid[proj_points_cnt++] = 0;
+                    // proj_points_cnt++;
+                    continue;
+                }
+                proj_pt(0) = (col - cx) * depth / fx;
+                proj_pt(1) = (row - cy) * depth / fy;
+                proj_pt(2) = depth;
+
+                proj_pt = camera_r * proj_pt + camera_pos_;
+
+                // if (u == 320 && v == 240) std::cout << "depth: " << depth << std::endl;
+                proj_points[proj_points_cnt] = proj_pt;
+                idx_valid[proj_points_cnt++] = 1;
+                // row_ptr = row_ptr + skip_pixel;
             }
-            proj_pt(0) = (u - cx) * depth / fx;
-            proj_pt(1) = (v - cy) * depth / fy;
-            proj_pt(2) = depth;
-
-            proj_pt = camera_r * proj_pt + camera_pos_;
-
-            // if (u == 320 && v == 240) std::cout << "depth: " << depth << std::endl;
-            proj_points[proj_points_cnt] = proj_pt;
-            idx_valid[proj_points_cnt++] = 1;
+            // std::cout<<std::endl;
         }
     }
 }
@@ -70,7 +123,7 @@ void PublishClouds(){
         pt.z = p(2);
         cloud.push_back(pt);
     }
-    // ROS_WARN("pt:%ld",cloud.size());
+    ROS_WARN("cloud pt:%ld",cloud.size());
 
     cloud.width = cloud.points.size();
     cloud.height = 1;
@@ -84,8 +137,10 @@ void PublishClouds(){
 
 void CalNormalVectors(){
     // 为每个像素计算一个局部法向量
-    int cols = depth_image.cols;
-    int rows = depth_image.rows;
+    // int cols = depth_image.cols/skip_pixel;
+    // int rows = depth_image.rows/skip_pixel;
+    int cols = depth_img.width/skip_pixel;
+    int rows = depth_img.height/skip_pixel;
     auto vu2idx = [&](int _v, int _u){
         return _u + _v * cols;
     };
@@ -145,7 +200,7 @@ void PublishWorldPointsNormals(){
 
     int points_num = proj_points.size();
 
-    for (int i = 0; i <points_num; i+=100) {
+    for (int i = 0; i <points_num; i+=10) {
         auto &pos = proj_points[i];
         auto nrl = local_normals[i];
         // Eigen::Vector3d e3 = Eigen::Vector3d(0,0,1);
@@ -161,10 +216,19 @@ void PublishWorldPointsNormals(){
         // dir.normalize();
         // double cosa = nrl(2);
         // 设置 marker 的颜色
-        marker.color.r = nrl(0);
-        marker.color.g = nrl(1);
-        marker.color.b = nrl(2);
-        marker.color.a = 1.0;
+        if(std::abs(nrl(2)) > cos(25.0 / 180.0 * M_PI)){
+            // ground
+            marker.color.r = 0;
+            marker.color.g = 0;
+            marker.color.b = 1;
+            marker.color.a = 1.0;
+        }else{
+            marker.color.r = 1;
+            marker.color.g = 0;
+            marker.color.b = 0;
+            marker.color.a = 1.0;
+        }
+        
         // 为每个箭头设置起点和终点
         geometry_msgs::Point start, end;
         start.x = pos(0);
@@ -208,7 +272,7 @@ void PublishNormals(){
         pt.z = nrl(2);
         cloud.push_back(pt);
     }
-    ROS_WARN("pt:%ld",cloud.size());
+    ROS_WARN("nrls pt:%ld",cloud.size());
 
     cloud.width = cloud.points.size();
     cloud.height = 1;
@@ -263,22 +327,51 @@ void CalDepthVariance(){
 void DepthCallback(const sensor_msgs::ImageConstPtr &img){
     // get depth image
     auto start_time = ros::Time::now();
-    cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
+    depth_img = *img;
+    // cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
+    // std::cout<<"type:"<<img->encoding<<std::endl;
+    // if (img->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+    //     std::cout<<"ok"<<std::endl;
+    //     (cv_ptr->image).convertTo(cv_ptr->image, CV_16UC1, k_depth_scaling_factor);
+    // }
+    // cv_ptr->image.copyTo(depth_image);
+    // ROS_WARN("get img");
+    // if (img->encoding == sensor_msgs::image_encodings::TYPE_16UC1){
+    //     // 获取图像的宽度和高度
+    //     int width = img->width;
+    //     int height = img->height;
 
-    if (img->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
-        (cv_ptr->image).convertTo(cv_ptr->image, CV_16UC1, k_depth_scaling_factor);
-    }
-    cv_ptr->image.copyTo(depth_image);
+    //     // 获取图像数据指针
+    //     const uint16_t* data = reinterpret_cast<const uint16_t*>(&img->data[0]);
+
+    //     // 遍历图像中的每个像素
+    //     for (int row = 0; row < height; row+=40)
+    //     {
+    //         for (int col = 0; col < width; col+=40)
+    //         {
+    //             // 计算像素索引
+    //             int index = row * width + col;
+
+    //             // 获取像素值
+    //             uint16_t pixel_value = data[index];
+    //             std::cout<<pixel_value<<" ";
+    //             // 这里你可以对像素值进行操作，例如打印
+    //             // ROS_INFO("Pixel value at (%d, %d): %u", col, row, pixel_value);
+    //         }
+    //         std::cout<<std::endl;
+    //     }
+    // }
     
     ProjDepthImage();
-    // PublishClouds();
+    PublishClouds();
     CalNormalVectors();
+    auto end_time = ros::Time::now();
     
     // ROS_INFO("get1,%ld",idx_valid.size());
-    // PublishWorldPointsNormals();
-    // PublishNormals();
+    PublishWorldPointsNormals();
+    PublishNormals();
     // TODO:把深度图的原图和计算结果完整的保存下来，存成txt文件，用来检查特殊方向的产生原因
-    auto end_time = ros::Time::now();
+    
     ROS_WARN("used time:%f",(end_time - start_time).toSec()*1000);
 }
 
@@ -337,12 +430,13 @@ void DepthCallbackCUDA(const sensor_msgs::ImageConstPtr &img){
     // }
     // std::cout<<cnt<<" "<<cnt1<<" "<<cnt2<<" "<<cnt3<<std::endl;
     // ROS_WARN("get_cloud");
+    auto end_time = ros::Time::now();
     if(nr.get_cloud(proj_points) && nr.get_normals(local_normals)){
         // PublishClouds();
         PublishWorldPointsNormals();
         PublishNormals();
     }
-    auto end_time = ros::Time::now();
+    
     ROS_WARN("used time:%f",(end_time - start_time).toSec()*1000);
 }
 
@@ -354,7 +448,7 @@ int main(int argc, char** argv){
     marker_pub = nh.advertise<visualization_msgs::MarkerArray>("/objects", 1);
     normals_pub = nh.advertise<sensor_msgs::PointCloud2>("/normals", 2);
     cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("/cloud", 2);
-    ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/d435/depth/image_raw", 2, DepthCallbackCUDA);
+    ros::Subscriber depth_sub = nh.subscribe<sensor_msgs::Image>("/camera/depth/image_rect_raw", 2, DepthCallback);
     // Eigen::Quaterniond camera_q1_ = Eigen::Quaterniond(0.707, 0.0, 0.707, 0.0);
     // Eigen::Quaterniond camera_q2_ = Eigen::Quaterniond(0.707, 0.0, 0.0, -0.707);
     // auto q = camera_q1_ * camera_q2_;
@@ -363,6 +457,10 @@ int main(int argc, char** argv){
     // while(ros::ok()){
         // ros::spinOnce();
     // }
+    camera_pos_ = Eigen::Vector3d::Zero();
+    camera_q_ = Eigen::Quaterniond(-0.5, 0.5, -0.5, 0.5);
+
+    Eigen::Matrix3d camera_r = camera_q_.toRotationMatrix();
     ros::spin();
     return 0;
 }
